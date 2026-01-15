@@ -1,22 +1,28 @@
 using UnityEngine;
-using FishNet.Managing;
-using FishNet.Transporting;
-using System.Collections.Generic;
+using UnityEngine.UI;
+using UnityEngine.Networking;
+using System.Collections;
 
 public class LobbyManager : MonoBehaviour
 {
-    public static LobbyManager Instance { get; private set; }
-    private NetworkManager _networkManager;
+    public static LobbyManager Instance;
 
-    public class ServerInfo
-    {
-        public string serverName;
-        public string password;
-        public string ipAddress;
-        public int port;
-    }
-
-    public List<ServerInfo> availableServers = new List<ServerInfo>();
+    [SerializeField]
+    private Button findGamesButton;
+    [SerializeField]
+    private Button createGameButton;
+    [SerializeField]
+    private Button goBackButton;
+    [SerializeField]
+    private Button submitCreateGameButton;
+    [SerializeField]
+    private GameObject actionListPanel;
+    [SerializeField]
+    private GameObject createGamePanel;
+    [SerializeField]
+    private TMPro.TMP_InputField gameNameInput;
+    [SerializeField]
+    private TMPro.TMP_InputField gamePasswordInput;
 
     private void Awake()
     {
@@ -29,47 +35,53 @@ public class LobbyManager : MonoBehaviour
         {
             Destroy(gameObject);
         }
-
-        _networkManager = FindFirstObjectByType<NetworkManager>();
     }
 
-    public void CreateServer(string serverName, string password)
+    private void Start()
     {
-        ServerInfo newServer = new ServerInfo
+        findGamesButton.onClick.AddListener(OnFindGamesButtonClicked);
+        createGameButton.onClick.AddListener(() =>
         {
-            serverName = serverName,
-            password = password,
-            ipAddress = "localhost",
-            port = 7777
-        };
-
-        availableServers.Add(newServer);
-
-        _networkManager.ServerManager.StartConnection();
-        _networkManager.ClientManager.StartConnection();
-
-        Debug.Log($"Server '{serverName}' created and started.");
+            actionListPanel.SetActive(false);
+            createGamePanel.SetActive(true);
+        });
+        goBackButton.onClick.AddListener(() =>
+        {
+            actionListPanel.SetActive(true);
+            createGamePanel.SetActive(false);
+        });
+        submitCreateGameButton.onClick.AddListener(() =>
+        {
+            string gameName = gameNameInput.text;
+            string gamePassword = gamePasswordInput.text;
+            Debug.Log($"Creating game: {gameName} with password: {gamePassword}");
+            // Implement game creation logic here
+        });
     }
 
-    public void JoinServer(ServerInfo serverInfo, string enteredPassword)
+    private void OnFindGamesButtonClicked()
     {
-        if (serverInfo.password != enteredPassword)
+        StartCoroutine(FetchAvailableGames());
+    }
+
+    IEnumerator FetchAvailableGames()
+    {
+        string url = "localhost:3000";
+        UnityWebRequest request = UnityWebRequest.Get(url);
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogError("Incorrect password. Cannot join server.");
-            return;
+            Debug.LogError("Error fetching games: " + request.error);
+            yield break;
         }
-        _networkManager.ClientManager.StartConnection(serverInfo.ipAddress, (ushort)serverInfo.port);
-        Debug.Log($"Joining server '{serverInfo.serverName}' at {serverInfo.ipAddress}:{serverInfo.port}");
-    }
+        string json = request.downloadHandler.text;
+        Debug.Log("Received game data: " + json);
 
-    public void StartGame(string sceneName)
-    {
-        if (!_networkManager.IsServerStarted)
+        GameList gameList = JsonUtility.FromJson<GameList>(json);
+        foreach (Game game in gameList.games)
         {
-            Debug.LogError("Only the server can start the game.");
-            return;
+            Debug.Log($"Game found - IP: {game.ip}, Port: {game.port}, Players: {game.players}");
         }
-
-        // _networkManager.SceneManager.LoadGlobalScenes(sceneName);
     }
 }
