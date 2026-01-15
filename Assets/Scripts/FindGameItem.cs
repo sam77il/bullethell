@@ -11,8 +11,8 @@ public class FindGameItem : MonoBehaviour
 
     public void SetGameInfo(string name, int port, int players)
     {
-        gameNameText.text = name;
-        portText.text = port.ToString();
-        playersText.text = players.ToString();
+        gameNameText.text = "Name: " + name;
+        portText.text = "Port: " + port.ToString();
+        playersText.text = "Players: " + players.ToString() + "/2";
     }
 }

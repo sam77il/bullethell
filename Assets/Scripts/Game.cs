@@ -1,6 +1,7 @@
 [System.Serializable]
 public class Game
 {
+    public string name;
     public string ip;
     public int port;
     public string password;
