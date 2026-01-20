@@ -2355,7 +2355,7 @@ MonoBehaviour:
   RuntimeParentNetworkBehaviour: {fileID: 0}
   RuntimeChildNetworkBehaviours: []
   _isNetworked: 1
-  _isSpawnable: 1
+  _isSpawnable: 0
   _isGlobal: 0
   _initializeOrder: 0
   _preventDespawnOnDisconnect: 0
@@ -5922,6 +5922,8 @@ MonoBehaviour:
   enterNameInput: {fileID: 424054079}
   gamesListContainer: {fileID: 1855910297}
   findGameItemPrefab: {fileID: 4835732562594784816, guid: fd4e46f31a2cfec46a66a7556dccda2c, type: 3}
+  lobbyPlayerListContainer: {fileID: 771714656}
+  lobbyPlayerItemPrefab: {fileID: 4715500944497977998, guid: c9162933e4797c84b8fc00f69766ef8f, type: 3}
 --- !u!4 &1624631225
 Transform:
   m_ObjectHideFlags: 0
