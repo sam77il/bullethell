@@ -7,6 +7,8 @@ using FishNet.Transporting;
 using System.Collections.Generic;
 using FishNet.Demo.AdditiveScenes;
 using FishNet.Object.Synchronizing;
+using FishNet;
+using System.Threading.Tasks;
 
 public class LobbyManager : MonoBehaviour
 {
@@ -14,7 +16,6 @@ public class LobbyManager : MonoBehaviour
     public MyPlayer localPlayer { get; private set; } = new MyPlayer();
 
     private NetworkManager networkManager;
-    private List<PlayerNetwork> registeredPlayers = new List<PlayerNetwork>();
 
     [SerializeField] private Button findGamesButton;
     [SerializeField] private Button createGameButton;
@@ -78,53 +79,6 @@ public class LobbyManager : MonoBehaviour
 
             localPlayer.name = enterNameInput.text;            
         });
-
-        networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
-        networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
-    }
-
-    private void OnDestroy()
-    {
-        if (networkManager != null)
-        {
-            networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
-            networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
-        }
-    }
-
-    private void OnServerConnectionState(ServerConnectionStateArgs args)
-    {
-    }
-
-    private void OnClientConnectionState(ClientConnectionStateArgs args)
-    {        
-        if (args.ConnectionState == LocalConnectionState.Started)
-        {
-            // Erfolgreich verbunden
-            lobbyPanel.SetActive(true);
-            findGamesPanel.SetActive(false);
-        }
-        else if (args.ConnectionState == LocalConnectionState.Stopped)
-        {
-            Debug.LogWarning("Connection failed or disconnected");
-        }
-    }
-
-    public void RegisterPlayer(PlayerNetwork player)
-    {
-        if (!registeredPlayers.Contains(player))
-        {
-            registeredPlayers.Add(player);
-            RefreshLobbyPlayers();
-        }
-    }
-
-    public void UnregisterPlayer(PlayerNetwork player)
-    {
-        if (registeredPlayers.Remove(player))
-        {
-            RefreshLobbyPlayers();
-        }
     }
 
     public void LeaveLobby()
@@ -134,7 +88,7 @@ public class LobbyManager : MonoBehaviour
         connectedGame = null;
     }
 
-    private void CreateGame()
+    private async void CreateGame()
     {
         string gameName = gameNameInput.text;
         string gamePassword = gamePasswordInput.text;
@@ -232,26 +186,25 @@ public class LobbyManager : MonoBehaviour
 
     public void OnPlayerDataChanged(IReadOnlyList<LobbyPlayerData> players)
     {
-        // RefreshLobbyPlayers();
-        Debug.Log(players.Count);
+        // Debug.Log("Players in lobby: " + PlayerNetwork.ServerInstance.Players.Count);
+        foreach (var p in players)
+        {
+            Debug.Log($"Player {p.PlayerName} (ClientId {p.ClientId})");
+        }
+
+        RefreshLobbyPlayers(players);
     }
 
-    private void RefreshLobbyPlayers()
+    private void RefreshLobbyPlayers(IReadOnlyList<LobbyPlayerData> players)
     {
-        Debug.Log(registeredPlayers.Count + " players in lobby.");
         foreach (Transform child in lobbyPlayerListContainer)
             Destroy(child.gameObject);
 
-        // Nutze die registrierte Liste statt FindObjectsByType
-        foreach (PlayerNetwork player in registeredPlayers)
+        foreach (var player in players)
         {
-            if (player != null)
-            {
-                GameObject item = Instantiate(lobbyPlayerItemPrefab, lobbyPlayerListContainer);
-                LobbyPlayerItem itemScript = item.GetComponent<LobbyPlayerItem>();
-                bool isHost = player.IsHostStarted;
-                // itemScript.SetPlayerInfo(player.PlayerName.Value, isHost);
-            }
+            GameObject item = Instantiate(lobbyPlayerItemPrefab, lobbyPlayerListContainer);
+            LobbyPlayerItem itemScript = item.GetComponent<LobbyPlayerItem>();
+            itemScript.SetPlayerInfo(player.PlayerName, true);
         }
     }
-}
+    }

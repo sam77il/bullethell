@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using FishNet.Object;
+using FishNet.Connection;
 
 public class Player : NetworkBehaviour
 {
@@ -24,11 +25,16 @@ public class Player : NetworkBehaviour
     {
         base.OnStartClient();
 
-        // Falls du PlayerInput benutzt:
-        // Nur für den Owner aktivieren
         PlayerInput input = GetComponent<PlayerInput>();
+
         if (input != null)
             input.enabled = IsOwner;
+    }
+
+    [TargetRpc]
+    public void OnRegisteredTargetRpc(NetworkConnection conn)
+    {
+        Debug.Log("Player " + Owner.ClientId + " is active. Registered!!!" + MyServerManager.Instance.ConnectedPlayers.Value);
     }
 
     void Update()

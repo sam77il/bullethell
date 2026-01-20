@@ -2325,7 +2325,7 @@ GameObject:
   - component: {fileID: 766521325}
   - component: {fileID: 766521324}
   m_Layer: 0
-  m_Name: PlayerNetwork
+  m_Name: MyServerManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3078,7 +3078,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 211a9f6ec51ddc14f908f5acc0cd0423, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _playerPrefab: {fileID: 0}
+  _playerPrefab: {fileID: -2214859413243745790, guid: b4255167cadfcf74dbbcab7abff5b032, type: 3}
   _addToDefaultScene: 1
   Spawns: []
 --- !u!1 &924478145
