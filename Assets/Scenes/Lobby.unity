@@ -3002,6 +3002,7 @@ GameObject:
   - component: {fileID: 897532246}
   - component: {fileID: 897532245}
   - component: {fileID: 897532247}
+  - component: {fileID: 897532248}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -3065,6 +3066,21 @@ MonoBehaviour:
   _port: 7770
   _maximumClients: 4095
   _clientAddress: localhost
+--- !u!114 &897532248
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 897532244}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 211a9f6ec51ddc14f908f5acc0cd0423, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _playerPrefab: {fileID: 0}
+  _addToDefaultScene: 1
+  Spawns: []
 --- !u!1 &924478145
 GameObject:
   m_ObjectHideFlags: 0
