@@ -5920,6 +5920,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8b67b3ef985f5bf498c4371090eb8dfe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  enteredName: 
+  ClientId: 0
   findGamesButton: {fileID: 1281109876}
   createGameButton: {fileID: 1279333837}
   goBackCreateGameButton: {fileID: 2042756344}
@@ -5928,6 +5930,7 @@ MonoBehaviour:
   enterNameQuitButton: {fileID: 1062427726}
   enterNameSubmitButton: {fileID: 629288752}
   leaveLobbyButton: {fileID: 888759139}
+  startGameButton: {fileID: 1108199986}
   actionListPanel: {fileID: 1949261598}
   createGamePanel: {fileID: 1674528812}
   lobbyPanel: {fileID: 415331235}

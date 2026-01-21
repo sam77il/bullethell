@@ -2,6 +2,9 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using FishNet.Object;
 using FishNet.Connection;
+using FishNet.Object.Synchronizing;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 
 public class Player : NetworkBehaviour
 {
@@ -11,6 +14,7 @@ public class Player : NetworkBehaviour
     public float deceleration = 25f;
     private Vector2 moveInput;
     private Vector2 currentVelocity;
+    private LobbyManager lobbyManager;
 
     public void Move(InputAction.CallbackContext context)
     {
@@ -24,29 +28,78 @@ public class Player : NetworkBehaviour
     public override void OnStartClient()
     {
         base.OnStartClient();
+        if (IsOwner)
+        {
+            lobbyManager = FindFirstObjectByType<LobbyManager>();
+            Debug.Log("Registering player on server: " + Owner.ClientId);
+            lobbyManager.lobbyPanel.SetActive(true);
+            lobbyManager.createGamePanel.SetActive(false);
+            lobbyManager.findGamesPanel.SetActive(false);
+
+            lobbyManager.ClientId = Owner.ClientId;
+            RegisterPlayerServerRpc(lobbyManager.enteredName);
+        }
 
         PlayerInput input = GetComponent<PlayerInput>();
 
         if (input != null)
+        {   
             input.enabled = IsOwner;
+        }
+    }
+
+    public override void OnStopClient()
+    {
+        base.OnStopClient();
+        
+        if (IsOwner && lobbyManager != null)
+        {
+            lobbyManager.GoToLobby();
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestServerClose()
+    {
+        Debug.Log("Requesting Close");
+        MyServerManager.Instance.CloseGameServerRpc();
     }
 
     [TargetRpc]
-    public void OnRegisteredTargetRpc(NetworkConnection conn)
+    public void Disconnect(NetworkConnection conn)
     {
-        Debug.Log("Player " + Owner.ClientId + " is active. Registered!!!" + MyServerManager.Instance.ConnectedPlayers.Value);
+        if (lobbyManager != null)
+        {
+            lobbyManager.GoToLobby();
+            ClientManager.StopConnection();
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void LeaveLobby()
+    {
+        MyServerManager.Instance.LeaveLobby(this);
+    }
+
+    [ServerRpc]
+    private void RegisterPlayerServerRpc(string playerName)
+    {
+        MyServerManager.Instance.AddPlayer(this, playerName);
+    }
+
+    [TargetRpc]
+    public void UpdateLobby(NetworkConnection conn, List<PlayerData> playersData)
+    {
+        lobbyManager.RefreshLobbyUI(playersData);
     }
 
     void Update()
     {
-        // Nur der Owner bewegt sich selbst
         if (!IsOwner)
             return;
 
-        // Zielgeschwindigkeit
         Vector2 targetVelocity = moveInput * maxSpeed;
 
-        // Beschleunigung oder Abbremsen
         float accelRate = (moveInput.sqrMagnitude > 0.01f)
             ? acceleration
             : deceleration;
