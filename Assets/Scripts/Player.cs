@@ -10,9 +10,25 @@ public class Player : NetworkBehaviour
     public float acceleration = 20f;
     public float deceleration = 25f;
     public float collisionDistance = 1.2f; // Abstand zu Enemies
+    public float Health = 100f;
+    public float spawnProtectionTime = 3f; // Spawnschutz in Sekunden
     private Vector2 moveInput;
     private Vector2 currentVelocity;
     private Vector3 lastValidPosition;
+    private float spawnTime;
+
+    // Dash
+    private bool isDashing = false;
+    private float dashSpeed = 25f;
+    private float dashDuration = 0.2f;
+    private float dashCooldown = 1f;
+    private float lastDashTime = -10f;
+    private Vector3 dashDirection;
+
+    // Shooting
+    public GameObject projectilePrefab;
+    public float shootCooldown = 0.3f;
+    private float lastShootTime = -10f;
 
     public void Move(InputAction.CallbackContext context)
     {
@@ -21,6 +37,88 @@ public class Player : NetworkBehaviour
             return;
 
         moveInput = context.ReadValue<Vector2>();
+    }
+
+    public void Dash(InputAction.CallbackContext context)
+    {
+        if (!IsOwner)
+            return;
+
+        if (context.performed && Time.time - lastDashTime >= dashCooldown)
+        {
+            if (moveInput.sqrMagnitude > 0.01f)
+            {
+                isDashing = true;
+                dashDirection = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
+                lastDashTime = Time.time;
+                Invoke(nameof(EndDash), dashDuration);
+            }
+        }
+    }
+
+    void EndDash()
+    {
+        isDashing = false;
+    }
+
+    public void Shoot(InputAction.CallbackContext context)
+    {
+        if (!IsOwner)
+            return;
+
+        if (context.performed && Time.time - lastShootTime >= shootCooldown)
+        {
+            lastShootTime = Time.time;
+
+            if (projectilePrefab == null)
+            {
+                Debug.LogError("Projectile Prefab not assigned!");
+                return;
+            }
+
+            // Raycast vom Player durch Mauszeiger
+            Ray ray = playerCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
+            Vector3 shootDirection = ray.direction.normalized;
+
+            // Entferne Y-Komponente - nur X und Z verwenden (2D)
+            shootDirection.y = 0f;
+            shootDirection = shootDirection.normalized;
+
+            Vector3 spawnPos = transform.position + shootDirection * 0.2f;
+            spawnPos.y = transform.position.y; // Gleiche Höhe wie Player
+
+            // Spawne Projektil lokal
+            GameObject projectile = Instantiate(projectilePrefab, spawnPos, Quaternion.LookRotation(shootDirection));
+
+            // Gib Velocity mit
+            Rigidbody rb = projectile.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.linearVelocity = shootDirection * 10f;
+            }
+
+            Debug.Log($"Shot fired in direction: {shootDirection}");
+        }
+    }
+
+    [Server]
+    public void TakeDamage(float damage)
+    {
+        // Spawnschutz prüfen
+        if (Time.time - spawnTime < spawnProtectionTime)
+        {
+            Debug.Log("Spawn protection active - no damage taken!");
+            return;
+        }
+
+        Health -= damage;
+        Debug.Log($"Player took {damage} damage! Health: {Health}");
+
+        if (Health <= 0)
+        {
+            Debug.Log("Player died!");
+            Destroy(gameObject);
+        }
     }
 
     public override void OnStartClient()
@@ -46,6 +144,7 @@ public class Player : NetworkBehaviour
     public override void OnStartServer()
     {
         base.OnStartServer();
+        spawnTime = Time.time;
 
         if (WaveSpawner.Instance != null)
             WaveSpawner.Instance.NotifyPlayerSpawned();
@@ -58,6 +157,14 @@ public class Player : NetworkBehaviour
 
         // Speicher letzte gültige Position
         lastValidPosition = transform.position;
+
+        // Dash hat Priorität
+        if (isDashing)
+        {
+            transform.Translate(dashDirection * dashSpeed * Time.deltaTime, Space.World);
+            CheckCollisions();
+            return;
+        }
 
         Vector2 targetVelocity = moveInput * maxSpeed;
 
@@ -85,7 +192,7 @@ public class Player : NetworkBehaviour
 
     void CheckCollisions()
     {
-        EnemyAI[] enemies = FindObjectsOfType<EnemyAI>();
+        EnemyAI[] enemies = FindObjectsByType<EnemyAI>(FindObjectsSortMode.None);
         foreach (EnemyAI enemy in enemies)
         {
             float distance = Vector3.Distance(transform.position, enemy.transform.position);
@@ -111,4 +218,3 @@ public class Player : NetworkBehaviour
         }
     }
 }
-

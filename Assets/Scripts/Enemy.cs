@@ -6,9 +6,13 @@ public class EnemyAI : NetworkBehaviour
     public float speed = 3f;
     public float targetUpdateInterval = 0.5f; // Alle 0.5 Sekunden aktualisieren
     public float minDistanceToOtherEnemies = 1.2f; // Abstand zu anderen Enemies
+    public float Health = 100f;
+    public float damageInterval = 1f; // Schaden alle 1 Sekunde
 
     private NetworkObject targetPlayer;
     private float targetUpdateTimer = 0f;
+    private Player contactPlayer = null;
+    private float damageTimer = 0f;
 
     public override void OnStartServer()
     {
@@ -41,6 +45,25 @@ public class EnemyAI : NetworkBehaviour
         if (!IsServerInitialized)
             return;
 
+        // Prüfe ob Enemy tot ist
+        if (Health <= 0)
+        {
+            Debug.Log("Enemy defeated!");
+            Destroy(gameObject);
+            return;
+        }
+
+        // Schaden-Timer wenn Spieler in Kontakt ist
+        if (contactPlayer != null)
+        {
+            damageTimer -= Time.deltaTime;
+            if (damageTimer <= 0f)
+            {
+                contactPlayer.TakeDamage(20f);
+                damageTimer = damageInterval;
+            }
+        }
+
         // Regelmäßig nächsten Spieler aktualisieren
         targetUpdateTimer -= Time.deltaTime;
         if (targetUpdateTimer <= 0f)
@@ -66,7 +89,7 @@ public class EnemyAI : NetworkBehaviour
 
     bool IsTooCloseToOtherEnemies()
     {
-        EnemyAI[] allEnemies = FindObjectsOfType<EnemyAI>();
+        EnemyAI[] allEnemies = FindObjectsByType<EnemyAI>(FindObjectsSortMode.None);
         foreach (EnemyAI enemy in allEnemies)
         {
             if (enemy == this)
@@ -83,7 +106,7 @@ public class EnemyAI : NetworkBehaviour
 
     void BodyBlockOtherEnemies()
     {
-        EnemyAI[] allEnemies = FindObjectsOfType<EnemyAI>();
+        EnemyAI[] allEnemies = FindObjectsByType<EnemyAI>(FindObjectsSortMode.None);
         foreach (EnemyAI enemy in allEnemies)
         {
             if (enemy == this)
@@ -106,5 +129,35 @@ public class EnemyAI : NetworkBehaviour
     {
         if (!IsServerInitialized)
             transform.position = pos;
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        // Nur Server führt Damage aus
+        if (!IsServerInitialized)
+            return;
+
+        if (other.CompareTag("Player"))
+        {
+            Player player = other.GetComponent<Player>();
+            if (player != null)
+            {
+                contactPlayer = player;
+                damageTimer = 0f; // Sofort Damage bei Eintritt
+                player.TakeDamage(20f);
+            }
+        }
+    }
+
+    void OnTriggerExit(Collider other)
+    {
+        // Nur Server
+        if (!IsServerInitialized)
+            return;
+
+        if (other.CompareTag("Player"))
+        {
+            contactPlayer = null;
+        }
     }
 }
