@@ -7,14 +7,17 @@ using FishNet.Transporting;
 using System.Collections.Generic;
 using FishNet.Demo.AdditiveScenes;
 using FishNet.Object.Synchronizing;
+using FishNet;
+using System.Threading.Tasks;
+using UnityEditor.PackageManager;
 
 public class LobbyManager : MonoBehaviour
 {
     public Game connectedGame { get; private set; }
-    public MyPlayer localPlayer { get; private set; } = new MyPlayer();
-
     private NetworkManager networkManager;
-    private List<PlayerNetwork> registeredPlayers = new List<PlayerNetwork>();
+
+    public string enteredName = "";
+    public int ClientId;
 
     [SerializeField] private Button findGamesButton;
     [SerializeField] private Button createGameButton;
@@ -24,11 +27,12 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private Button enterNameQuitButton;
     [SerializeField] private Button enterNameSubmitButton;
     [SerializeField] private Button leaveLobbyButton;
+    [SerializeField] private Button startGameButton;
 
     [SerializeField] private GameObject actionListPanel;
-    [SerializeField] private GameObject createGamePanel;
-    [SerializeField] private GameObject lobbyPanel;
-    [SerializeField] private GameObject findGamesPanel;
+    [SerializeField] public GameObject createGamePanel;
+    [SerializeField] public GameObject lobbyPanel;
+    [SerializeField] public GameObject findGamesPanel;
     [SerializeField] private GameObject namePanel;
 
     [SerializeField] private TMPro.TMP_InputField gameNameInput;
@@ -73,68 +77,45 @@ public class LobbyManager : MonoBehaviour
 
         enterNameSubmitButton.onClick.AddListener(() =>
         {
+            enteredName = enterNameInput.text;
+            Debug.Log("Entered Name: " + enteredName);
             namePanel.SetActive(false);
             actionListPanel.SetActive(true);
-
-            localPlayer.name = enterNameInput.text;            
         });
-
-        networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
-        networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
-    }
-
-    private void OnDestroy()
-    {
-        if (networkManager != null)
-        {
-            networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
-            networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
-        }
-    }
-
-    private void OnServerConnectionState(ServerConnectionStateArgs args)
-    {
-    }
-
-    private void OnClientConnectionState(ClientConnectionStateArgs args)
-    {        
-        if (args.ConnectionState == LocalConnectionState.Started)
-        {
-            // Erfolgreich verbunden
-            lobbyPanel.SetActive(true);
-            findGamesPanel.SetActive(false);
-        }
-        else if (args.ConnectionState == LocalConnectionState.Stopped)
-        {
-            Debug.LogWarning("Connection failed or disconnected");
-        }
-    }
-
-    public void RegisterPlayer(PlayerNetwork player)
-    {
-        if (!registeredPlayers.Contains(player))
-        {
-            registeredPlayers.Add(player);
-            RefreshLobbyPlayers();
-        }
-    }
-
-    public void UnregisterPlayer(PlayerNetwork player)
-    {
-        if (registeredPlayers.Remove(player))
-        {
-            RefreshLobbyPlayers();
-        }
     }
 
     public void LeaveLobby()
     {
-        lobbyPanel.SetActive(false);
-        actionListPanel.SetActive(true);
-        connectedGame = null;
+        Player localPlayer = FindLocalPlayer(ClientId);
+        if (ClientId == 0)
+        {
+            localPlayer.RequestServerClose();
+        } else
+        {
+            localPlayer.LeaveLobby();
+        }
     }
 
-    private void CreateGame()
+    private Player FindLocalPlayer(int theId)
+    {
+        Player[] players = FindObjectsByType<Player>(FindObjectsSortMode.None);
+        foreach (var player in players)
+        {
+            if (player.Owner.ClientId == theId)
+            {
+                return player;
+            }
+        }
+        return null;
+    }
+
+    public void GoToLobby()
+    {
+        lobbyPanel.SetActive(false);
+        actionListPanel.SetActive(true);
+    }
+
+    private async void CreateGame()
     {
         string gameName = gameNameInput.text;
         string gamePassword = gamePasswordInput.text;
@@ -155,10 +136,6 @@ public class LobbyManager : MonoBehaviour
             password = gamePassword,
             players = networkManager.ServerManager.Clients.Count
         };
-
-        lobbyPanel.SetActive(true);
-        createGamePanel.SetActive(false);
-        Debug.Log("Created and connected to game: " + port + " - " + gameName);
     }
 
     private void LoadGamesIntoList(GameList gameList)
@@ -227,31 +204,48 @@ public class LobbyManager : MonoBehaviour
     {
         networkManager.TransportManager.Transport.SetPort((ushort)port);
         networkManager.ClientManager.StartConnection();
-        Debug.Log("Connecting to game: port " + port + " - " + name);
     }
 
-    public void OnPlayerDataChanged(IReadOnlyList<LobbyPlayerData> players)
+    public void RefreshLobbyUI(List<PlayerData> playersData)
     {
-        // RefreshLobbyPlayers();
-        Debug.Log(players.Count);
-    }
-
-    private void RefreshLobbyPlayers()
-    {
-        Debug.Log(registeredPlayers.Count + " players in lobby.");
         foreach (Transform child in lobbyPlayerListContainer)
-            Destroy(child.gameObject);
-
-        // Nutze die registrierte Liste statt FindObjectsByType
-        foreach (PlayerNetwork player in registeredPlayers)
         {
-            if (player != null)
+            Destroy(child.gameObject);
+        }
+                
+        foreach (var playerData in playersData)
+        {
+            GameObject playerItem = Instantiate(lobbyPlayerItemPrefab, lobbyPlayerListContainer);
+            LobbyPlayerItem itemScript = playerItem.GetComponent<LobbyPlayerItem>();
+                        
+            if (ClientId == 0 && playerData.ClientId != ClientId)
             {
-                GameObject item = Instantiate(lobbyPlayerItemPrefab, lobbyPlayerListContainer);
-                LobbyPlayerItem itemScript = item.GetComponent<LobbyPlayerItem>();
-                bool isHost = player.IsHostStarted;
-                // itemScript.SetPlayerInfo(player.PlayerName.Value, isHost);
+                itemScript.SetPlayerInfo(playerData.PlayerName, true, () => KickPlayer(playerData.ClientId));
             }
+            else
+            {
+                itemScript.SetPlayerInfo(playerData.PlayerName, false, () => KickPlayer(playerData.ClientId));
+            }
+
+            Debug.Log("Players in Server: " + playerData.PlayerName + " (ID: " + playerData.ClientId + ")");
+        }
+
+        if (ClientId == 0)
+        {
+            startGameButton.gameObject.SetActive(true);
+        } else
+        {
+            startGameButton.gameObject.SetActive(false);
+        }
+    }
+
+    private void KickPlayer(int cId)
+    {
+        if (ClientId == 0)
+        {
+            Player player = FindLocalPlayer(cId);
+
+            player.LeaveLobby();
         }
     }
 }
