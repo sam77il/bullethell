@@ -10,6 +10,7 @@ using FishNet.Object.Synchronizing;
 using FishNet;
 using System.Threading.Tasks;
 using UnityEditor.PackageManager;
+using FishNet.Managing.Scened;
 
 public class LobbyManager : MonoBehaviour
 {
@@ -18,6 +19,7 @@ public class LobbyManager : MonoBehaviour
 
     public string enteredName = "";
     public int ClientId;
+    private int portToConnect;
 
     [SerializeField] private Button findGamesButton;
     [SerializeField] private Button createGameButton;
@@ -28,16 +30,20 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private Button enterNameSubmitButton;
     [SerializeField] private Button leaveLobbyButton;
     [SerializeField] private Button startGameButton;
+    [SerializeField] private Button submitPasswordButton;
+    [SerializeField] private Button cancelPasswordButton;
 
     [SerializeField] private GameObject actionListPanel;
     [SerializeField] public GameObject createGamePanel;
     [SerializeField] public GameObject lobbyPanel;
     [SerializeField] public GameObject findGamesPanel;
     [SerializeField] private GameObject namePanel;
+    [SerializeField] private GameObject passwordPanel;
 
     [SerializeField] private TMPro.TMP_InputField gameNameInput;
     [SerializeField] private TMPro.TMP_InputField gamePasswordInput;
     [SerializeField] private TMPro.TMP_InputField enterNameInput;
+    [SerializeField] private TMPro.TMP_InputField passwordInput;
     [SerializeField] private Transform gamesListContainer;
     [SerializeField] private GameObject findGameItemPrefab;
     [SerializeField] private Transform lobbyPlayerListContainer;
@@ -72,6 +78,15 @@ public class LobbyManager : MonoBehaviour
             actionListPanel.SetActive(true);
             findGamesPanel.SetActive(false);
         });
+        cancelPasswordButton.onClick.AddListener(() =>
+        {
+            passwordPanel.SetActive(false);
+        });
+        submitPasswordButton.onClick.AddListener(() =>
+        {
+            passwordPanel.SetActive(false);
+            ConnectToGame(passwordInput.text);
+        });
         submitCreateGameButton.onClick.AddListener(CreateGame);
         leaveLobbyButton.onClick.AddListener(LeaveLobby);
 
@@ -82,6 +97,16 @@ public class LobbyManager : MonoBehaviour
             namePanel.SetActive(false);
             actionListPanel.SetActive(true);
         });
+        startGameButton.onClick.AddListener(StartGame);
+    }
+
+    private void StartGame()
+    {
+        Player localPlayer = FindLocalPlayer(ClientId);
+        if (ClientId == 0)
+        {
+            localPlayer.RequestStartGame();
+        }
     }
 
     public void LeaveLobby()
@@ -136,6 +161,9 @@ public class LobbyManager : MonoBehaviour
             password = gamePassword,
             players = networkManager.ServerManager.Clients.Count
         };
+        // 100millisecond delay to ensure server starts before client tries to connect
+        await Task.Delay(100);
+        MyServerManager.Instance.SetGamePassword(gamePassword);
     }
 
     private void LoadGamesIntoList(GameList gameList)
@@ -157,9 +185,15 @@ public class LobbyManager : MonoBehaviour
         GameObject gameItem = Instantiate(findGameItemPrefab, gamesListContainer);
         FindGameItem itemScript = gameItem.GetComponent<FindGameItem>();
         itemScript.SetGameInfo(name, port, players);
+        connectedGame = new Game
+        {
+            name = name,
+            port = port,
+            players = players
+        };
         gameItem.GetComponent<Button>().onClick.AddListener(() =>
         {
-            ConnectToGame(port, name);
+            passwordPanel.SetActive(true);
         });
     }
 
@@ -200,10 +234,19 @@ public class LobbyManager : MonoBehaviour
         LoadGamesIntoList(gameList);
     }
 
-    public void ConnectToGame(int port, string name)
+    public async void ConnectToGame(string password = "")
     {
-        networkManager.TransportManager.Transport.SetPort((ushort)port);
+        networkManager.TransportManager.Transport.SetPort((ushort)connectedGame.port);
         networkManager.ClientManager.StartConnection();
+        passwordPanel.SetActive(false);
+        await Task.Delay(500);
+        Player player = FindLocalPlayer(ClientId);
+        player.CheckPassword(password);
+    }
+
+    public void ApproveConnection()
+    {
+        Debug.Log("Approved");
     }
 
     public void RefreshLobbyUI(List<PlayerData> playersData)

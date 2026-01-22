@@ -15,6 +15,7 @@ public class Player : NetworkBehaviour
     private Vector2 moveInput;
     private Vector2 currentVelocity;
     private LobbyManager lobbyManager;
+    public string PlayerName;
 
     public void Move(InputAction.CallbackContext context)
     {
@@ -31,15 +32,24 @@ public class Player : NetworkBehaviour
         if (IsOwner)
         {
             lobbyManager = FindFirstObjectByType<LobbyManager>();
-            Debug.Log("Registering player on server: " + Owner.ClientId);
-            lobbyManager.lobbyPanel.SetActive(true);
-            lobbyManager.createGamePanel.SetActive(false);
-            lobbyManager.findGamesPanel.SetActive(false);
+            if (lobbyManager != null)
+            {    
+                Debug.Log("Registering player on server: " + Owner.ClientId);
+                lobbyManager.lobbyPanel.SetActive(true);
+                lobbyManager.createGamePanel.SetActive(false);
+                lobbyManager.findGamesPanel.SetActive(false);
 
-            lobbyManager.ClientId = Owner.ClientId;
-            RegisterPlayerServerRpc(lobbyManager.enteredName);
+                lobbyManager.ClientId = Owner.ClientId;
+                PlayerName = lobbyManager.enteredName;
+                RegisterPlayerServerRpc(lobbyManager.enteredName);
+            }
         }
 
+        SpawnPlayer();
+    }
+
+    public void SpawnPlayer()
+    {
         PlayerInput input = GetComponent<PlayerInput>();
 
         if (input != null)
@@ -58,11 +68,23 @@ public class Player : NetworkBehaviour
         }
     }
 
+    public void CheckPassword(string password)
+    {
+        Debug.Log("Testing password: " + password);
+        MyServerManager.Instance.CheckPassword(this, password);
+    }
+
     [ServerRpc(RequireOwnership = false)]
     public void RequestServerClose()
     {
         Debug.Log("Requesting Close");
         MyServerManager.Instance.CloseGameServerRpc();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestStartGame()
+    {
+        MyServerManager.Instance.StartGame();
     }
 
     [TargetRpc]
