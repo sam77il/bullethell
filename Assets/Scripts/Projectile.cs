@@ -5,7 +5,12 @@ public class Projectile : MonoBehaviour
     public float lifetime = 5f;
     private float spawnTime;
     private Rigidbody rb;
+    private Player owner; // Wer hat das Projektil geschossen
 
+    public void SetOwner(Player player)
+    {
+        owner = player;
+    }
 
     void Start()
     {
@@ -15,7 +20,7 @@ public class Projectile : MonoBehaviour
         if (rb != null)
         {
             rb.useGravity = false;
-            // Drehe das Projektil in Richtung der Velocity
+            // Projektil in Richtung der Velocity drehen
             if (rb.linearVelocity.sqrMagnitude > 0)
             {
                 transform.rotation = Quaternion.LookRotation(rb.linearVelocity.normalized) * Quaternion.Euler(0, 0, -90);
@@ -33,19 +38,15 @@ public class Projectile : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        // Treffe nur Enemies
+        // Damage on Enemy
         if (other.CompareTag("Enemy"))
         {
             EnemyAI enemy = other.GetComponent<EnemyAI>();
             if (enemy != null)
             {
-                enemy.Health -= 100f;
-                Debug.Log($"Projectile hit enemy! Enemy health: {enemy.Health}");
-
-                if (enemy.Health <= 0)
-                {
-                    Debug.Log("Enemy defeated!");
-                }
+                // Rufe Server-Methode auf, um Schaden zu verursachen
+                enemy.TakeDamage(100f, owner);
+                Debug.Log($"Projectile hit enemy!");
             }
 
             Destroy(gameObject);

@@ -24,13 +24,13 @@ public class WaveSpawner : NetworkBehaviour
     {
         Instance = this;
     }
-
+    #region Serverstart
     public override void OnStartServer()
     {
         base.OnStartServer();
-        // WARTET jetzt auf Player → nichts starten!
+        // wartet auf spieler
     }
-
+    #endregion
     // Wird vom Player aufgerufen
     [Server]
     public void NotifyPlayerSpawned()

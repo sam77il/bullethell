@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using FishNet.Object;
+using FishNet.Object.Synchronizing;
 
 public class Player : NetworkBehaviour
 {
@@ -10,12 +11,22 @@ public class Player : NetworkBehaviour
     public float acceleration = 20f;
     public float deceleration = 25f;
     public float collisionDistance = 1.2f; // Abstand zu Enemies
+
     public float Health = 100f;
+    public int Kills = 0; // Killcounter
+    private bool isDead = false;
+
     public float spawnProtectionTime = 3f; // Spawnschutz in Sekunden
     private Vector2 moveInput;
     private Vector2 currentVelocity;
     private Vector3 lastValidPosition;
     private float spawnTime;
+
+    // Öffentliche Methode, um Spawn-Zeit abzufragen
+    public float GetSpawnTime()
+    {
+        return spawnTime;
+    }
 
     // Dash
     private bool isDashing = false;
@@ -32,8 +43,7 @@ public class Player : NetworkBehaviour
 
     public void Move(InputAction.CallbackContext context)
     {
-        // Nur der lokale Spieler darf Input setzen
-        if (!IsOwner)
+        if (!IsOwner || isDead)
             return;
 
         moveInput = context.ReadValue<Vector2>();
@@ -41,7 +51,7 @@ public class Player : NetworkBehaviour
 
     public void Dash(InputAction.CallbackContext context)
     {
-        if (!IsOwner)
+        if (!IsOwner || isDead)
             return;
 
         if (context.performed && Time.time - lastDashTime >= dashCooldown)
@@ -63,7 +73,7 @@ public class Player : NetworkBehaviour
 
     public void Shoot(InputAction.CallbackContext context)
     {
-        if (!IsOwner)
+        if (!IsOwner || isDead)
             return;
 
         if (context.performed && Time.time - lastShootTime >= shootCooldown)
@@ -90,6 +100,13 @@ public class Player : NetworkBehaviour
             // Spawne Projektil lokal
             GameObject projectile = Instantiate(projectilePrefab, spawnPos, Quaternion.LookRotation(shootDirection));
 
+            // Setze Owner für Killcounter
+            Projectile projectileScript = projectile.GetComponent<Projectile>();
+            if (projectileScript != null)
+            {
+                projectileScript.SetOwner(this);
+            }
+
             // Gib Velocity mit
             Rigidbody rb = projectile.GetComponent<Rigidbody>();
             if (rb != null)
@@ -114,10 +131,51 @@ public class Player : NetworkBehaviour
         Health -= damage;
         Debug.Log($"Player took {damage} damage! Health: {Health}");
 
+        // Synchronisiere Health zu allen Clients
+        UpdateHealthRpc(Health);
+
         if (Health <= 0)
         {
             Debug.Log("Player died!");
-            Destroy(gameObject);
+            isDead = true;
+            SetDeadRpc();
+        }
+    }
+
+    [ObserversRpc]
+    private void UpdateHealthRpc(float newHealth)
+    {
+        Health = newHealth;
+    }
+
+    [Server]
+    public void AddKill()
+    {
+        Kills++;
+        Debug.Log($"Player got a kill! Total kills: {Kills}");
+
+        // Synchronisiere Kills zu allen Clients
+        UpdateKillsRpc(Kills);
+    }
+
+    [ObserversRpc]
+    private void UpdateKillsRpc(int newKills)
+    {
+        Kills = newKills;
+    }
+
+    [ObserversRpc]
+    private void SetDeadRpc()
+    {
+        isDead = true;
+
+        // Optional: Visuelles Feedback für Tod
+        Renderer renderer = GetComponentInChildren<Renderer>();
+        if (renderer != null)
+        {
+            Color color = renderer.material.color;
+            color.a = 0.5f; // Halbtransparent
+            renderer.material.color = color;
         }
     }
 
@@ -152,7 +210,7 @@ public class Player : NetworkBehaviour
 
     void Update()
     {
-        if (!IsOwner)
+        if (!IsOwner || isDead)
             return;
 
         // Speicher letzte gültige Position

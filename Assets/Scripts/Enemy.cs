@@ -7,12 +7,33 @@ public class EnemyAI : NetworkBehaviour
     public float targetUpdateInterval = 0.5f; // Alle 0.5 Sekunden aktualisieren
     public float minDistanceToOtherEnemies = 1.2f; // Abstand zu anderen Enemies
     public float Health = 100f;
-    public float damageInterval = 1f; // Schaden alle 1 Sekunde
+    public float damageInterval = 0.2f; // Schaden alle 0.2 Sekunden
 
     private NetworkObject targetPlayer;
     private float targetUpdateTimer = 0f;
     private Player contactPlayer = null;
     private float damageTimer = 0f;
+
+    // Server-Methode, um Schaden zu nehmen
+    [ServerRpc(RequireOwnership = false)]
+    public void TakeDamage(float damage, Player attacker = null)
+    {
+        Health -= damage;
+        Debug.Log($"Enemy took {damage} damage! Health: {Health}");
+
+        if (Health <= 0)
+        {
+            Debug.Log("Enemy defeated - destroying!");
+
+            // Gib dem Spieler einen Kill
+            if (attacker != null)
+            {
+                attacker.AddKill();
+            }
+
+            Destroy(gameObject);
+        }
+    }
 
     public override void OnStartServer()
     {
@@ -45,21 +66,17 @@ public class EnemyAI : NetworkBehaviour
         if (!IsServerInitialized)
             return;
 
-        // Prüfe ob Enemy tot ist
-        if (Health <= 0)
-        {
-            Debug.Log("Enemy defeated!");
-            Destroy(gameObject);
-            return;
-        }
-
         // Schaden-Timer wenn Spieler in Kontakt ist
         if (contactPlayer != null)
         {
             damageTimer -= Time.deltaTime;
             if (damageTimer <= 0f)
             {
-                contactPlayer.TakeDamage(20f);
+                // Prüfe Spawnschutz bevor Schaden verursacht wird
+                if (Time.time - contactPlayer.GetSpawnTime() >= contactPlayer.spawnProtectionTime)
+                {
+                    contactPlayer.TakeDamage(20f);
+                }
                 damageTimer = damageInterval;
             }
         }
@@ -143,8 +160,7 @@ public class EnemyAI : NetworkBehaviour
             if (player != null)
             {
                 contactPlayer = player;
-                damageTimer = 0f; // Sofort Damage bei Eintritt
-                player.TakeDamage(20f);
+                damageTimer = damageInterval; // Warte erst ein Intervall, bevor Schaden kommt
             }
         }
     }
