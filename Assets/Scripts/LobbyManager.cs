@@ -32,6 +32,8 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private Button startGameButton;
     [SerializeField] private Button submitPasswordButton;
     [SerializeField] private Button cancelPasswordButton;
+    [SerializeField] private Button leaderboardButton;
+    [SerializeField] private Button leaderboardCloseButton;
 
     [SerializeField] private GameObject actionListPanel;
     [SerializeField] public GameObject createGamePanel;
@@ -39,6 +41,7 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] public GameObject findGamesPanel;
     [SerializeField] private GameObject namePanel;
     [SerializeField] private GameObject passwordPanel;
+    [SerializeField] private GameObject leaderboardPanel;
 
     [SerializeField] private TMPro.TMP_InputField gameNameInput;
     [SerializeField] private TMPro.TMP_InputField gamePasswordInput;
@@ -48,6 +51,8 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private GameObject findGameItemPrefab;
     [SerializeField] private Transform lobbyPlayerListContainer;
     [SerializeField] private GameObject lobbyPlayerItemPrefab;
+    [SerializeField] private GameObject leaderboardItemPrefab;
+    [SerializeField] private Transform leaderboardListContainer;
 
     private void Awake()
     {
@@ -98,6 +103,51 @@ public class LobbyManager : MonoBehaviour
             actionListPanel.SetActive(true);
         });
         startGameButton.onClick.AddListener(StartGame);
+        leaderboardButton.onClick.AddListener(() =>
+        {
+            leaderboardPanel.SetActive(true);
+            actionListPanel.SetActive(false);
+            StartCoroutine(LoadLeaderboard());
+        });
+
+        leaderboardCloseButton.onClick.AddListener(() =>
+        {
+            leaderboardPanel.SetActive(false);
+            actionListPanel.SetActive(true);
+        });
+    }
+
+    private IEnumerator LoadLeaderboard()
+    {
+        string url = "localhost:3000/leaderboard";
+        UnityWebRequest request = UnityWebRequest.Get(url);
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogError("Error fetching games: " + request.error);
+            yield break;
+        }
+        string json = request.downloadHandler.text;
+
+        LeaderboardList leaderboardList = JsonUtility.FromJson<LeaderboardList>(json);
+        LoadLeaderboardIntoList(leaderboardList);
+    }
+
+    private void LoadLeaderboardIntoList(LeaderboardList leaderboardList)
+    {
+        foreach (Transform child in leaderboardListContainer)
+        {
+            Destroy(child.gameObject);
+        }
+
+        // Example data for demonstration purposes
+        foreach (Leaderboard entry in leaderboardList.entries)
+        {
+            GameObject leaderboardItem = Instantiate(leaderboardItemPrefab, leaderboardListContainer);
+            LeaderboardItem itemScript = leaderboardItem.GetComponent<LeaderboardItem>();
+            itemScript.SetLeaderboardInfo(entry.playerName, entry.score.ToString(), entry.date);
+        }
     }
 
     private void StartGame()
@@ -206,7 +256,7 @@ public class LobbyManager : MonoBehaviour
 
     IEnumerator CreateGameOnServer(string name, string password, ushort port)
     {
-        string url = "localhost:3000";
+        string url = "localhost:3000/create";
         WWWForm form = new WWWForm();
         form.AddField("name", name);
         form.AddField("port", port.ToString());
@@ -219,7 +269,7 @@ public class LobbyManager : MonoBehaviour
 
     IEnumerator FetchAvailableGames()
     {
-        string url = "localhost:3000";
+        string url = "localhost:3000/servers";
         UnityWebRequest request = UnityWebRequest.Get(url);
         yield return request.SendWebRequest();
 

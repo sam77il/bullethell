@@ -426,7 +426,13 @@ MonoBehaviour:
   maxSpeed: 5
   acceleration: 15
   deceleration: 20
+  collisionDistance: 1.2
+  Health: 100
+  Kills: 0
+  spawnProtectionTime: 3
   PlayerName: 
+  projectilePrefab: {fileID: 493027038351932792, guid: ae2878dc84950704aa7a649788ee64be, type: 3}
+  shootCooldown: 0.3
 --- !u!114 &-2214859413243745790
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -82,7 +82,7 @@ public class MyServerManager : NetworkBehaviour
     public IEnumerator UpdateServerPlayerCount()
     {
         int port = InstanceFinder.TransportManager.Transport.GetPort();
-        string url = "localhost:3000/" + port;
+        string url = "localhost:3000/server/" + port;
         WWWForm form = new WWWForm();
         form.AddField("players", PlayerList.Count.ToString());
 
@@ -121,7 +121,7 @@ public class MyServerManager : NetworkBehaviour
     private IEnumerator FetchPasswordFromBroadcast()
     {
         int port = InstanceFinder.TransportManager.Transport.GetPort();
-        string url = "localhost:3000/" + port;
+        string url = "localhost:3000/server/" + port;
         UnityWebRequest request = UnityWebRequest.Get(url);
         yield return request.SendWebRequest();
 
@@ -187,7 +187,7 @@ public class MyServerManager : NetworkBehaviour
     private IEnumerator CloseGameInBroadcast()
     {
         int port = InstanceFinder.TransportManager.Transport.GetPort();
-        string url = "localhost:3000/" + port;
+        string url = "localhost:3000/server/" + port;
         UnityWebRequest request = UnityWebRequest.Delete(url);
         yield return request.SendWebRequest();
     }
@@ -208,7 +208,7 @@ public class MyServerManager : NetworkBehaviour
     [Server]
     public void StartGame()
     {
-        SceneLookupData lookupData = new SceneLookupData("Furkan");
+        SceneLookupData lookupData = new SceneLookupData("Main");
         SceneLoadData loadData = new SceneLoadData(lookupData);
 
         loadData.ReplaceScenes = ReplaceOption.All;
