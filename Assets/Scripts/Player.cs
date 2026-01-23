@@ -1,7 +1,14 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using FishNet.Object;
+using FishNet.Connection;
 using FishNet.Object.Synchronizing;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using FishNet;
+using FishNet.Managing.Scened;
+using System.Collections;
+using UnityEngine.Networking;
 
 public class Player : NetworkBehaviour
 {
@@ -19,8 +26,10 @@ public class Player : NetworkBehaviour
     public float spawnProtectionTime = 3f; // Spawnschutz in Sekunden
     private Vector2 moveInput;
     private Vector2 currentVelocity;
+    private LobbyManager lobbyManager;
+    public string PlayerName;
     private Vector3 lastValidPosition;
-    private float spawnTime;
+    public float spawnTime;
 
     // Öffentliche Methode, um Spawn-Zeit abzufragen
     public float GetSpawnTime()
@@ -40,7 +49,6 @@ public class Player : NetworkBehaviour
     public GameObject projectilePrefab;
     public float shootCooldown = 0.3f;
     private float lastShootTime = -10f;
-    private LobbyManager lobbyManager;
 
     public void Move(InputAction.CallbackContext context)
     {
@@ -98,24 +106,42 @@ public class Player : NetworkBehaviour
             Vector3 spawnPos = transform.position + shootDirection * 0.2f;
             spawnPos.y = transform.position.y; // Gleiche Höhe wie Player
 
-            // Spawne Projektil lokal
-            GameObject projectile = Instantiate(projectilePrefab, spawnPos, Quaternion.LookRotation(shootDirection));
+            // WICHTIG: Rufe ServerRpc auf, um Projektil auf Server zu spawnen
+            ShootServerRpc(spawnPos, shootDirection);
+        }
+    }
 
-            // Setze Owner für Killcounter
-            Projectile projectileScript = projectile.GetComponent<Projectile>();
-            if (projectileScript != null)
-            {
-                projectileScript.SetOwner(this);
-            }
+    [ServerRpc]
+    private void ShootServerRpc(Vector3 spawnPos, Vector3 shootDirection)
+    {
+        // Spawne Projektil auf dem Server
+        GameObject projectile = Instantiate(projectilePrefab, spawnPos, Quaternion.LookRotation(shootDirection));
 
-            // Gib Velocity mit
-            Rigidbody rb = projectile.GetComponent<Rigidbody>();
-            if (rb != null)
-            {
-                rb.linearVelocity = shootDirection * 10f;
-            }
+        // Setze Velocity BEVOR du spawnst
+        Rigidbody rb = projectile.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.linearVelocity = shootDirection * 10f;
+        }
 
-            Debug.Log($"Shot fired in direction: {shootDirection}");
+        // Setze Owner für Killcounter
+        Projectile projectileScript = projectile.GetComponent<Projectile>();
+        if (projectileScript != null)
+        {
+            projectileScript.SetOwner(this);
+        }
+
+        // Spawne über Netzwerk
+        NetworkObject netObj = projectile.GetComponent<NetworkObject>();
+        if (netObj != null)
+        {
+            ServerManager.Spawn(netObj);
+            Debug.Log($"Projectile spawned on server in direction: {shootDirection}");
+        }
+        else
+        {
+            Debug.LogError("Projectile prefab needs NetworkObject component!");
+            Destroy(projectile);
         }
     }
 
@@ -165,6 +191,8 @@ public class Player : NetworkBehaviour
         Kills = newKills;
     }
 
+    private bool sent = false;
+
     [ObserversRpc]
     private void SetDeadRpc()
     {
@@ -178,6 +206,62 @@ public class Player : NetworkBehaviour
             color.a = 0.5f; // Halbtransparent
             renderer.material.color = color;
         }
+
+        if (IsOwner && !sent)
+        {
+            sent = true;
+            StartCoroutine(GoBackToLobby());
+        }
+    }
+
+    private IEnumerator GoBackToLobby()
+    {
+        yield return new WaitForSeconds(3f); // Warte 3 Sekunden vor dem Zurückkehren zum Lobby-Menü
+        StartCoroutine(UpdateLeaderboard());
+
+        if (IsOwner)
+        {
+            SceneLookupData lookupData = new SceneLookupData("Lobby");
+            SceneLoadData loadData = new SceneLoadData(lookupData);
+
+            loadData.ReplaceScenes = ReplaceOption.All;
+
+            InstanceFinder.SceneManager.LoadGlobalScenes(loadData);
+            NetworkManager.ClientManager.StopConnection();
+            lobbyManager.GoToLobby();
+        }
+    }
+
+    [ObserversRpc]
+    public void RpcGameWon()
+    {
+        if (IsOwner)
+        {
+            Debug.Log("You won the game!");
+
+            // Optional: Visuelles Feedback für Sieg
+            Renderer renderer = GetComponentInChildren<Renderer>();
+            if (renderer != null)
+            {
+                Color color = renderer.material.color;
+                color = Color.yellow; // Gelbe Farbe für Sieg
+                renderer.material.color = color;
+            }
+
+            StartCoroutine(GoBackToLobby());
+        }
+    }
+
+    private IEnumerator UpdateLeaderboard()
+    {
+        string url = "localhost:3000/leaderboard";
+        WWWForm form = new WWWForm();
+        form.AddField("playerName", PlayerName);
+        form.AddField("score", Kills.ToString());
+        form.AddField("date", System.DateTime.Now.ToString());
+
+        UnityWebRequest request = UnityWebRequest.Post(url, form);
+        yield return request.SendWebRequest();
     }
 
     public override void OnStartClient()
@@ -186,15 +270,24 @@ public class Player : NetworkBehaviour
         if (IsOwner)
         {
             lobbyManager = FindFirstObjectByType<LobbyManager>();
-            Debug.Log("Registering player on server: " + Owner.ClientId);
-            lobbyManager.lobbyPanel.SetActive(true);
-            lobbyManager.createGamePanel.SetActive(false);
-            lobbyManager.findGamesPanel.SetActive(false);
+            if (lobbyManager != null)
+            {    
+                Debug.Log("Registering player on server: " + Owner.ClientId);
+                lobbyManager.lobbyPanel.SetActive(true);
+                lobbyManager.createGamePanel.SetActive(false);
+                lobbyManager.findGamesPanel.SetActive(false);
 
-            lobbyManager.ClientId = Owner.ClientId;
-            RegisterPlayerServerRpc(lobbyManager.enteredName);
+                lobbyManager.ClientId = Owner.ClientId;
+                PlayerName = lobbyManager.enteredName;
+                RegisterPlayerServerRpc(lobbyManager.enteredName);
+            }
         }
 
+        SpawnPlayer();
+    }
+
+    public void SpawnPlayer()
+    {
         if (!IsOwner)  // Prüft, ob das der lokale Spieler ist
         {
             playerCamera.gameObject.SetActive(false);
@@ -224,11 +317,23 @@ public class Player : NetworkBehaviour
         }
     }
 
+    public void CheckPassword(string password)
+    {
+        Debug.Log("Testing password: " + password);
+        MyServerManager.Instance.CheckPassword(this, password);
+    }
+
     [ServerRpc(RequireOwnership = false)]
     public void RequestServerClose()
     {
         Debug.Log("Requesting Close");
         MyServerManager.Instance.CloseGameServerRpc();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestStartGame()
+    {
+        MyServerManager.Instance.StartGame();
     }
 
     [TargetRpc]
@@ -257,15 +362,6 @@ public class Player : NetworkBehaviour
     public void UpdateLobby(NetworkConnection conn, List<PlayerData> playersData)
     {
         lobbyManager.RefreshLobbyUI(playersData);
-    }
-
-    public override void OnStartServer()
-    {
-        base.OnStartServer();
-        spawnTime = Time.time;
-
-        if (WaveSpawner.Instance != null)
-            WaveSpawner.Instance.NotifyPlayerSpawned();
     }
 
     void Update()
@@ -333,6 +429,51 @@ public class Player : NetworkBehaviour
         {
             Vector3 awayFromEnemy = (transform.position - collision.transform.position).normalized;
             transform.position += awayFromEnemy * 0.5f;
+        }
+    }
+
+    public override void OnStartNetwork()
+    {
+        base.OnStartNetwork();
+        
+        // Event abonnieren
+        InstanceFinder.SceneManager.OnLoadEnd += OnSceneLoadEnd;
+    }
+
+    public override void OnStopNetwork()
+    {
+        base.OnStopNetwork();
+        
+        // Event abmelden (wichtig!)
+        if (InstanceFinder.SceneManager != null)
+        {
+            InstanceFinder.SceneManager.OnLoadEnd -= OnSceneLoadEnd;
+        }
+    }
+
+    private void OnSceneLoadEnd(SceneLoadEndEventArgs args)
+    {
+        // Prüfe ob überhaupt Szenen geladen wurden
+        if (args.LoadedScenes == null || args.LoadedScenes.Length == 0)
+        {
+            Debug.LogWarning("OnSceneLoadEnd: Keine Szenen geladen");
+            return;
+        }
+
+        string sceneName = args.LoadedScenes[0].name;
+        Debug.Log($"Szene geladen: {sceneName}");
+        
+        if (sceneName == "Main")
+        {
+            Debug.Log("OnMainSceneLoaded: Starte Wave Spawning");
+            if (IsServer && WaveSpawner.Instance != null)
+            {
+                WaveSpawner.Instance.NotifyPlayerSpawned();
+            }
+        }
+        else if (sceneName == "Lobby")
+        {
+            Debug.Log("OnLobbySceneLoaded: Zurück im Lobby-Menü");
         }
     }
 }

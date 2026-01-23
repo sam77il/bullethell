@@ -1,6 +1,8 @@
 using UnityEngine;
+using FishNet.Object;
+using FishNet.Connection;
 
-public class Projectile : MonoBehaviour
+public class Projectile : NetworkBehaviour
 {
     public float lifetime = 5f;
     private float spawnTime;
@@ -12,9 +14,19 @@ public class Projectile : MonoBehaviour
         owner = player;
     }
 
+    public override void OnStartNetwork()
+    {
+        base.OnStartNetwork();
+        
+        // Nur auf Server die Lifetime verwalten
+        if (IsServer)
+        {
+            spawnTime = Time.time;
+        }
+    }
+
     void Start()
     {
-        spawnTime = Time.time;
         rb = GetComponent<Rigidbody>();
 
         if (rb != null)
@@ -30,14 +42,19 @@ public class Projectile : MonoBehaviour
 
     void Update()
     {
-        if (Time.time - spawnTime > lifetime)
+        // Nur Server entscheidet über Lifetime
+        if (IsServer && Time.time - spawnTime > lifetime)
         {
-            Destroy(gameObject);
+            DespawnProjectile();
         }
     }
 
     void OnTriggerEnter(Collider other)
     {
+        // Nur auf Server Kollisionen verarbeiten
+        if (!IsServer)
+            return;
+
         // Damage on Enemy
         if (other.CompareTag("Enemy"))
         {
@@ -49,8 +66,17 @@ public class Projectile : MonoBehaviour
                 Debug.Log($"Projectile hit enemy!");
             }
 
-            Destroy(gameObject);
+            DespawnProjectile();
+        }
+    }
+
+    [Server]
+    private void DespawnProjectile()
+    {
+        // Despawne über Netzwerk (nicht Destroy!)
+        if (NetworkObject != null && NetworkObject.IsSpawned)
+        {
+            ServerManager.Despawn(NetworkObject);
         }
     }
 }
-

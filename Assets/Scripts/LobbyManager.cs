@@ -10,6 +10,7 @@ using FishNet.Object.Synchronizing;
 using FishNet;
 using System.Threading.Tasks;
 using UnityEditor.PackageManager;
+using FishNet.Managing.Scened;
 
 public class LobbyManager : MonoBehaviour
 {
@@ -18,6 +19,7 @@ public class LobbyManager : MonoBehaviour
 
     public string enteredName = "";
     public int ClientId;
+    private int portToConnect;
 
     [SerializeField] private Button findGamesButton;
     [SerializeField] private Button createGameButton;
@@ -28,20 +30,29 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private Button enterNameSubmitButton;
     [SerializeField] private Button leaveLobbyButton;
     [SerializeField] private Button startGameButton;
+    [SerializeField] private Button submitPasswordButton;
+    [SerializeField] private Button cancelPasswordButton;
+    [SerializeField] private Button leaderboardButton;
+    [SerializeField] private Button leaderboardCloseButton;
 
     [SerializeField] private GameObject actionListPanel;
     [SerializeField] public GameObject createGamePanel;
     [SerializeField] public GameObject lobbyPanel;
     [SerializeField] public GameObject findGamesPanel;
     [SerializeField] private GameObject namePanel;
+    [SerializeField] private GameObject passwordPanel;
+    [SerializeField] private GameObject leaderboardPanel;
 
     [SerializeField] private TMPro.TMP_InputField gameNameInput;
     [SerializeField] private TMPro.TMP_InputField gamePasswordInput;
     [SerializeField] private TMPro.TMP_InputField enterNameInput;
+    [SerializeField] private TMPro.TMP_InputField passwordInput;
     [SerializeField] private Transform gamesListContainer;
     [SerializeField] private GameObject findGameItemPrefab;
     [SerializeField] private Transform lobbyPlayerListContainer;
     [SerializeField] private GameObject lobbyPlayerItemPrefab;
+    [SerializeField] private GameObject leaderboardItemPrefab;
+    [SerializeField] private Transform leaderboardListContainer;
 
     private void Awake()
     {
@@ -72,6 +83,15 @@ public class LobbyManager : MonoBehaviour
             actionListPanel.SetActive(true);
             findGamesPanel.SetActive(false);
         });
+        cancelPasswordButton.onClick.AddListener(() =>
+        {
+            passwordPanel.SetActive(false);
+        });
+        submitPasswordButton.onClick.AddListener(() =>
+        {
+            passwordPanel.SetActive(false);
+            ConnectToGame(passwordInput.text);
+        });
         submitCreateGameButton.onClick.AddListener(CreateGame);
         leaveLobbyButton.onClick.AddListener(LeaveLobby);
 
@@ -82,6 +102,61 @@ public class LobbyManager : MonoBehaviour
             namePanel.SetActive(false);
             actionListPanel.SetActive(true);
         });
+        startGameButton.onClick.AddListener(StartGame);
+        leaderboardButton.onClick.AddListener(() =>
+        {
+            leaderboardPanel.SetActive(true);
+            actionListPanel.SetActive(false);
+            StartCoroutine(LoadLeaderboard());
+        });
+
+        leaderboardCloseButton.onClick.AddListener(() =>
+        {
+            leaderboardPanel.SetActive(false);
+            actionListPanel.SetActive(true);
+        });
+    }
+
+    private IEnumerator LoadLeaderboard()
+    {
+        string url = "localhost:3000/leaderboard";
+        UnityWebRequest request = UnityWebRequest.Get(url);
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogError("Error fetching games: " + request.error);
+            yield break;
+        }
+        string json = request.downloadHandler.text;
+
+        LeaderboardList leaderboardList = JsonUtility.FromJson<LeaderboardList>(json);
+        LoadLeaderboardIntoList(leaderboardList);
+    }
+
+    private void LoadLeaderboardIntoList(LeaderboardList leaderboardList)
+    {
+        foreach (Transform child in leaderboardListContainer)
+        {
+            Destroy(child.gameObject);
+        }
+
+        // Example data for demonstration purposes
+        foreach (Leaderboard entry in leaderboardList.entries)
+        {
+            GameObject leaderboardItem = Instantiate(leaderboardItemPrefab, leaderboardListContainer);
+            LeaderboardItem itemScript = leaderboardItem.GetComponent<LeaderboardItem>();
+            itemScript.SetLeaderboardInfo(entry.playerName, entry.score.ToString(), entry.date);
+        }
+    }
+
+    private void StartGame()
+    {
+        Player localPlayer = FindLocalPlayer(ClientId);
+        if (ClientId == 0)
+        {
+            localPlayer.RequestStartGame();
+        }
     }
 
     public void LeaveLobby()
@@ -136,6 +211,9 @@ public class LobbyManager : MonoBehaviour
             password = gamePassword,
             players = networkManager.ServerManager.Clients.Count
         };
+        // 100millisecond delay to ensure server starts before client tries to connect
+        await Task.Delay(100);
+        MyServerManager.Instance.SetGamePassword(gamePassword);
     }
 
     private void LoadGamesIntoList(GameList gameList)
@@ -157,9 +235,15 @@ public class LobbyManager : MonoBehaviour
         GameObject gameItem = Instantiate(findGameItemPrefab, gamesListContainer);
         FindGameItem itemScript = gameItem.GetComponent<FindGameItem>();
         itemScript.SetGameInfo(name, port, players);
+        connectedGame = new Game
+        {
+            name = name,
+            port = port,
+            players = players
+        };
         gameItem.GetComponent<Button>().onClick.AddListener(() =>
         {
-            ConnectToGame(port, name);
+            passwordPanel.SetActive(true);
         });
     }
 
@@ -172,7 +256,7 @@ public class LobbyManager : MonoBehaviour
 
     IEnumerator CreateGameOnServer(string name, string password, ushort port)
     {
-        string url = "localhost:3000";
+        string url = "localhost:3000/create";
         WWWForm form = new WWWForm();
         form.AddField("name", name);
         form.AddField("port", port.ToString());
@@ -185,7 +269,7 @@ public class LobbyManager : MonoBehaviour
 
     IEnumerator FetchAvailableGames()
     {
-        string url = "localhost:3000";
+        string url = "localhost:3000/servers";
         UnityWebRequest request = UnityWebRequest.Get(url);
         yield return request.SendWebRequest();
 
@@ -200,10 +284,19 @@ public class LobbyManager : MonoBehaviour
         LoadGamesIntoList(gameList);
     }
 
-    public void ConnectToGame(int port, string name)
+    public async void ConnectToGame(string password = "")
     {
-        networkManager.TransportManager.Transport.SetPort((ushort)port);
+        networkManager.TransportManager.Transport.SetPort((ushort)connectedGame.port);
         networkManager.ClientManager.StartConnection();
+        passwordPanel.SetActive(false);
+        await Task.Delay(500);
+        Player player = FindLocalPlayer(ClientId);
+        player.CheckPassword(password);
+    }
+
+    public void ApproveConnection()
+    {
+        Debug.Log("Approved");
     }
 
     public void RefreshLobbyUI(List<PlayerData> playersData)

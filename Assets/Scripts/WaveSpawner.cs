@@ -24,13 +24,7 @@ public class WaveSpawner : NetworkBehaviour
     {
         Instance = this;
     }
-    #region Serverstart
-    public override void OnStartServer()
-    {
-        base.OnStartServer();
-        // wartet auf spieler
-    }
-    #endregion
+
     // Wird vom Player aufgerufen
     [Server]
     public void NotifyPlayerSpawned()
@@ -81,9 +75,16 @@ public class WaveSpawner : NetworkBehaviour
             }
         }
 
+        // Get all players
+        Player[] players = FindObjectsByType<Player>(FindObjectsSortMode.None);
+        foreach (var player in players)
+        {
+            player.RpcGameWon();
+        }
         // Alle Waves abgeschlossen
         Debug.Log("All waves completed! Game won!");
     }
+    
 
     void SpawnEnemy(bool isBoss)
     {
