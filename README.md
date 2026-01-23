@@ -77,6 +77,9 @@ public readonly SyncList<PlayerData> PlayerList = new SyncList<PlayerData>();
 - Spieler können aus der Map laufen (beabsichtigt)
 - Gegner-Damage-Delay ist einstellbar
 
+## UI
+- Die UI habe ich kostenlos von kenney installiert und angewandt.
+
 ## Technologie-Stack
 
 - Unity Engine
