@@ -87,3 +87,31 @@ public readonly SyncList<PlayerData> PlayerList = new SyncList<PlayerData>();
 ---
 
 *Entwickelt als Multiplayer-Projekt mit Fokus auf kooperatives Gameplay*
+
+
+## Wer hat was gemaht
+Lobby: Samil
+Broadcast: Samil
+Mechanics: Furkan
+Wellen-/Gegner Logik: Furkan
+
+Samil Files:
+FindGameItem.cs
+Game.cs
+Leaderboard.cs
+LeaderboardItem.cs
+LobbyManager.cs
+LobbyPlayerItem.cs
+MyServerManager.cs
+Player.cs
+PlayerData.cs
+
+Furkan:
+CameraFollow2D_Smooth.cs
+Enemy.cs
+GameOverManager.cs
+HealthDisplay.cs
+KillDisplay.cs
+Player.cs
+Projectile.cs
+WaveSpawner.cs
